@@ -13,15 +13,18 @@ options = {:port => 3306, :hostname => nil}
 attemptElection = false
 generateCredentials = true
 currentLeader = nil
+currentLeaderHost = nil
+currentLeaderPort = nil
+hostname = nil
+port = nil
 
 parser = OptionParser.new do|opts|
-        opts.banner = "Usage: bootstrap.rb [options]"
-        opts.on('-p', '--port port', 'Port') do |port|
-                options[:port] = port;
-        end
-        opts.on('-h', '--hostname ip or hostname', 'Hostname') do |hostname|
-                options[:hostname] = hostname;
-        end
+	opts.banner = "Usage: bootstrap.rb [options]"
+	opts.on('-h', '--hostname ip or hostname', 'Hostname') do |hostname|
+    parsedHostname = URI.parse(hostname)
+    hostname = parsedHostname.host
+    port = parsedHostname.port
+	end
 end
 parser.parse!
 
@@ -31,10 +34,6 @@ username_random = ('a'..'z').to_a.shuffle[0,8].join
 username = username_base + "_" + username_random
 password = SecureRandom.hex
 encrypted_password = password; #encrypt this!
-
-# Read hostname and port
-hostname = options[:hostname]
-port = options[:port]
 
 # Initialize http
 http = Net::HTTP.new("172.17.42.1", 4001)
@@ -103,6 +102,8 @@ case
   else
     puts "ELECTION: Leader is #{leaderResponse.body}"
     currentLeader = leaderResponse.body
+    currentLeaderHost = URI.parse(currentLeader).host
+    currentLeaderPort = URI.parse(currentLeader).port
 end
 
 # Attempt to become master
@@ -114,6 +115,8 @@ if attemptElection
     when "200"
       puts "ELECTION: Election successful. #{hostname}:#{port} is now the master."
       currentLeader = "#{hostname}:#{port}"
+      currentLeaderHost = URI.parse(currentLeader).host
+      currentLeaderPort = URI.parse(currentLeader).port
   end
 end
 

@@ -2,3 +2,9 @@
 log-bin = /var/log/mysql/mysql-bin.log
 binlog-do-db=stock
 server-id=<%=serverId%>
+
+master-host=<%=currentLeaderHost%>
+master-port=<%currentLeaderPort%>
+master-user=user
+master-password=password
+show-slave-auth-info=true
