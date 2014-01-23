@@ -162,9 +162,10 @@ File.open('/etc/mysql/conf.d/replication.cnf', 'w') { |file| file.write(cnf.resu
 puts "-------------------------------End Config-----------------------------------"
 
 # Start mysql
-startMysql = `/usr/bin/mysqld_safe &`
-sleep(5)
+puts "MYSQL: Installing DB"
+installMysql = `mysql_install_db`
+puts "MYSQL: Starting process"
+mysqlPID = spawn("/usr/bin/mysqld_safe & sleep 10")
+puts "MYSQL: Granting replication users access"
+puts mysqlPID
 #grantUser = `echo "GRANT ALL ON *.* TO #{username}@'%' IDENTIFIED BY '#{password}' WITH GRANT OPTION; FLUSH PRIVILEGES" | mysql`
-#killMysql = `killall mysqld`
-#sleep(5)
-#startMysql = `/usr/bin/mysqld_safe`
