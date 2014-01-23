@@ -17,14 +17,17 @@ currentLeaderHost = nil
 currentLeaderPort = nil
 hostname = nil
 port = nil
+serverId = nil
+parsedHostname = nil
 
 parser = OptionParser.new do|opts|
-	opts.banner = "Usage: bootstrap.rb [options]"
-	opts.on('-h', '--hostname ip or hostname', 'Hostname') do |hostname|
+  opts.banner = "Usage: bootstrap.rb [options]"
+  opts.on('-h', '--hostname ip or hostname', 'Hostname') do |hostname|
     parsedHostname = URI.parse(hostname)
+    puts "COMMAND: Parsed hostname is #{parsedHostname.to_s}"
     hostname = parsedHostname.host
     port = parsedHostname.port
-	end
+  end
 end
 parser.parse!
 
@@ -100,23 +103,25 @@ case
     puts "ELECTION: Encountered empty body"
     puts "ELECTION: Leader not found. Attempting Election"
   else
-    puts "ELECTION: Leader is #{leaderResponse.body}"
-    currentLeader = leaderResponse.body
-    currentLeaderHost = URI.parse(currentLeader).host
-    currentLeaderPort = URI.parse(currentLeader).port
+    currentLeader = "http://" + leaderResponse.body.to_s
+    parsedLeader = URI.parse(currentLeader)
+    puts "ELECTION: Elected leader is #{parsedLeader.to_s}"
+    currentLeaderHost = parsedLeader.host.to_s
+    currentLeaderPort = parsedLeader.port.to_s
+    currentLeader = "#{currentLeaderHost}:#{currentLeaderPort}"
 end
 
 # Attempt to become master
 if attemptElection
   electionRequest = Net::HTTP::Put.new("/mod/v2/leader/buildafund-mysql?ttl=60")
-  electionRequest.set_form_data('name' => hostname + ":" + port)
+  electionRequest.set_form_data('name' => hostname + ':' + port.to_s)
   electionResponse = http.request(electionRequest)
   case electionResponse.code
     when "200"
       puts "ELECTION: Election successful. #{hostname}:#{port} is now the master."
       currentLeader = "#{hostname}:#{port}"
-      currentLeaderHost = URI.parse(currentLeader).host
-      currentLeaderPort = URI.parse(currentLeader).port
+      currentLeaderHost = hostname.to_s
+      currentLeaderPort = port.to_s
   end
 end
 
@@ -126,18 +131,27 @@ instancesRequest = Net::HTTP::Get.new("/v2/keys/services/buildafund-mysql/instan
 instancesResponse = http.request(instancesRequest)
 instances = JSON.parse(instancesResponse.body)
 
-slaves = Hash.new
+slaveDetails = Hash.new
+leaderDetails = Hash.new
 instances['node']['nodes'].each do |instance|
   name = instance['key'].split('/')[-1]
   serverId = Integer(instance['createdIndex'])
-  slaveData = Hash.new
+  keyData = Hash.new
   instance['nodes'].each do |keys|
     keyName = keys['key'].split('/')[-1]
     keyValue = keys['value'].chomp('"').reverse.chomp('"').reverse #remove quotes, crazy
-    slaveData[keyName] = keyValue
-    slaves[name] = slaveData
+    keyData[keyName] = keyValue
+    if !currentLeader.eql?(name)
+      slaveDetails[name] = keyData
+    else
+      leaderDetails[name] = keyData
+    end
   end
 end
+#puts "slave:"
+#pp slaveDetails
+#puts "leader:"
+#pp leaderDetails
 
 # Write config file based on role
 puts "----------------------------Generated Config--------------------------------"
@@ -145,10 +159,11 @@ cnf_template = File.read('/usr/scripts/replication.cnf.erb')
 cnf = ERB.new(cnf_template)
 puts cnf.result()
 File.open('/etc/mysql/conf.d/replication.cnf', 'w') { |file| file.write(cnf.result()) }
+puts "-------------------------------End Config-----------------------------------"
 
 # Start mysql
-#startMysql = `/usr/bin/mysqld_safe`
-#sleep(5)
+startMysql = `/usr/bin/mysqld_safe &`
+sleep(5)
 #grantUser = `echo "GRANT ALL ON *.* TO #{username}@'%' IDENTIFIED BY '#{password}' WITH GRANT OPTION; FLUSH PRIVILEGES" | mysql`
 #killMysql = `killall mysqld`
 #sleep(5)

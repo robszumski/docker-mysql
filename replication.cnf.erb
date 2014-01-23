@@ -4,7 +4,7 @@ binlog-do-db=stock
 server-id=<%=serverId%>
 
 master-host=<%=currentLeaderHost%>
-master-port=<%currentLeaderPort%>
-master-user=user
-master-password=password
+master-port=<%=currentLeaderPort%>
+master-user=<%=leaderDetails[currentLeader]["user"]%>
+master-password=<%=leaderDetails[currentLeader]["password"]%>
 show-slave-auth-info=true
