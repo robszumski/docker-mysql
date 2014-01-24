@@ -3,8 +3,8 @@ log-bin = /var/log/mysql/mysql-bin.log
 binlog-do-db=stock
 server-id=<%=serverId%>
 
-#master-host=<%=currentLeaderHost%>
-#master-port=<%=currentLeaderPort%>
-#master-user=<%=leaderDetails[currentLeader]["user"]%>
-#master-password=<%=leaderDetails[currentLeader]["password"]%>
+#master-host=<%=currentLeader["host"]%>
+#master-port=<%=currentLeader["port"]%>
+#master-user=<%=currentLeader["user"]%>
+#master-password=<%=currentLeader["password"]%>
 #show-slave-auth-info=true
