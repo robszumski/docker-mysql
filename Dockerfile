@@ -13,4 +13,3 @@ ENV PATH /app/bin:/app/vendor/bundle/bin:/opt/rubies/2.0.0-p0/bin:/usr/local/bin
 RUN gem install json
 
 ADD . /usr/scripts
-#RUN /usr/scripts/bootstrap.rb
