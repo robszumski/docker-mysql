@@ -31,8 +31,8 @@ parser = OptionParser.new do|opts|
 end
 parser.parse!
 
-#hostname = parsedHostname.host
-#port = parsedHostname.port
+hostname = parsedHostname.host
+port = parsedHostname.port
 
 # Generate user/pass
 def generateUsername
@@ -40,13 +40,13 @@ def generateUsername
   username_random = ('a'..'z').to_a.shuffle[0,8].join
   username = username_base + "_" + username_random
 end
-generateUsername
+username = generateUsername
 
 def generatePassword
   password = SecureRandom.hex
   encrypted_password = password; #encrypt this!
 end
-generatePassword
+password = generatePassword
 
 # Save to etcd
 def register (hostname, port)
@@ -73,8 +73,8 @@ register(parsedHostname.host, parsedHostname.port)
 
 def etcdWrite (keyPath, value, comment)
   http = Net::HTTP.new("172.17.42.1", 4001)
-  writeRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/user")
-  writeRequest.set_form_data('value' => username)
+  writeRequest = Net::HTTP::Put.new(keyPath)
+  writeRequest.set_form_data('value' => value)
   writeResponse = http.request(writeRequest);
   case writeResponse.code
     when "201", "200"
@@ -91,7 +91,7 @@ if generateCredentials
   etcdWrite(path, username, "Username #{username}")
   # Write Password
   path = "/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/password"
-  etcdWrite(path, username, "Password")
+  etcdWrite(path, password, "Password")
 else
   puts "WRITE: Credentials already exist. Skipping generation."
 end
@@ -140,7 +140,13 @@ end
 
 if currentLeader.nil?
   path = "/mod/v2/leader/buildafund-mysql?ttl=60"
-  isNewLeader = becomeLeader(path, "#{currentLeader['full']}")
+  isNewLeader = becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
+  if isNewLeader
+    currentLeader = Hash.new()
+    currentLeader["host"] = parsedHostname.host.to_s
+    currentLeader["port"] = parsedHostname.port.to_s
+    currentLeader["full"] = "#{parsedHostname.host}:#{parsedHostname.port}"
+  end
 end
 
 # Read all instances
@@ -166,7 +172,7 @@ def etcdRead(etcdPath)
 end
 
 instances = etcdRead("/v2/keys/services/buildafund-mysql/instances?recursive=true")
-instances.each_with_index do |name, data|
+instances.each do |name, data|
   if currentLeader["full"].eql?(name)
     currentLeader["user"] = data["user"]
     currentLeader["password"] = data["password"]
@@ -182,7 +188,7 @@ File.open('/etc/mysql/conf.d/replication.cnf', 'w') { |file| file.write(cnf.resu
 puts "-------------------------------End Config-----------------------------------"
 
 # Start mysql
-=begin
+#=begin
 puts "MYSQL: Installing DB"
 installMysql = `mysql_install_db`
 puts "MYSQL: Starting process"
@@ -203,4 +209,4 @@ if !"#{hostname}:#{port}".eql?(currentLeader)
 else
   puts "MASTER: No configuration was needed."
 end
-=end
+#=end
