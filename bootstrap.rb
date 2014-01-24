@@ -22,14 +22,17 @@ parsedHostname = nil
 
 parser = OptionParser.new do|opts|
   opts.banner = "Usage: bootstrap.rb [options]"
-  opts.on('-h', '--hostname ip or hostname', 'Hostname') do |hostname|
+  opts.on('-h', '--hostname http://ip-or-hostname', 'Hostname') do |hostname|
     parsedHostname = URI.parse(hostname)
     puts "COMMAND: Parsed hostname is #{parsedHostname.to_s}"
-    hostname = parsedHostname.host
-    port = parsedHostname.port
+    #hostname = parsedHostname.host
+    #port = parsedHostname.port
   end
 end
 parser.parse!
+
+hostname = parsedHostname.host
+port = parsedHostname.port
 
 # Generate user/pass
 username_base = "admin"
@@ -74,7 +77,7 @@ if generateCredentials
       puts "WRITE: Could not write username. Received unknown code #{writeResponse.code} from etcd"
   end
 
-  # Write password to etcd
+    # Write password to etcd
   passwordRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/password")
   passwordRequest.set_form_data('value' => password)
   passwordResponse = http.request(passwordRequest);
@@ -114,12 +117,12 @@ end
 # Attempt to become master
 if attemptElection
   electionRequest = Net::HTTP::Put.new("/mod/v2/leader/buildafund-mysql?ttl=60")
-  electionRequest.set_form_data('name' => hostname + ':' + port.to_s)
+  electionRequest.set_form_data('name' => "#{hostname.to_s}:#{port.to_s}")
   electionResponse = http.request(electionRequest)
   case electionResponse.code
     when "200"
-      puts "ELECTION: Election successful. #{hostname}:#{port} is now the master."
-      currentLeader = "#{hostname}:#{port}"
+      puts "ELECTION: Election successful. #{hostname.to_s}:#{port.to_s} is now the master."
+      currentLeader = "#{hostname.to_s}:#{port.to_s}"
       currentLeaderHost = hostname.to_s
       currentLeaderPort = port.to_s
   end
@@ -162,6 +165,7 @@ File.open('/etc/mysql/conf.d/replication.cnf', 'w') { |file| file.write(cnf.resu
 puts "-------------------------------End Config-----------------------------------"
 
 # Start mysql
+#=begin
 puts "MYSQL: Installing DB"
 installMysql = `mysql_install_db`
 puts "MYSQL: Starting process"
@@ -172,3 +176,14 @@ puts "MYSQL: Granting replication users access"
 `echo "CREATE USER '#{username}'@'%' IDENTIFIED BY '#{password}';" | mysql`
 `echo "CREATE USER '#{username}'@'localhost' IDENTIFIED BY '#{password}';" | mysql`
 `echo "GRANT REPLICATION SLAVE ON *.* TO '#{username}'@'%'; FLUSH PRIVILEGES;" | mysql`
+
+# If slave, configure
+if !"#{hostname}:#{port}".eql?(currentLeader)
+  puts "SLAVE: Setting master to #{currentLeaderHost}:#{currentLeaderPort}"
+  puts "SLAVE: Setting username to #{leaderDetails[currentLeader]['user']}"
+  puts "SLAVE: Setting log position to X"
+  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeaderHost}', MASTER_PORT= #{currentLeaderPort}, MASTER_USER='#{leaderDetails[currentLeader]['user']}', MASTER_PASSWORD='#{leaderDetails[currentLeader]['password']}', MASTER_LOG_FILE='', MASTER_LOG_POS=4;" | mysql`
+else
+  puts "MASTER: No configuration was needed."
+end
+#=end
