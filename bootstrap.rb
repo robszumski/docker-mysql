@@ -131,7 +131,6 @@ def readLeader (etcdPath, options={})
   raise ArgumentError, 'HTTP redirect too deep' if options[:redirLimit] == 0
 
   http = Net::HTTP.new(options[:leaderIPAddress], options[:leaderPort])
-  http.set_debug_output($stdout)
   leaderRequest = Net::HTTP::Get.new(etcdPath)
   leaderResponse = http.request(leaderRequest)
   leaderValue = nil
@@ -208,7 +207,6 @@ def etcdRead(etcdPath, options={})
     when Net::HTTPSuccess
       # Process successful response
       instances = JSON.parse(instancesResponse.body)
-
       instanceDetails = Hash.new
       instances['node']['nodes'].each do |instance|
         name = instance['key'].split('/')[-1]
@@ -222,8 +220,8 @@ def etcdRead(etcdPath, options={})
           keyData[keyName] = keyValue
           instanceDetails[name] = keyData
         end
-        return instanceDetails
       end
+      return instanceDetails
     when Net::HTTPRedirection
       newLeaderIPAddress = URI.parse(instancesResponse['location']).host
       newLeaderPort = URI.parse(instancesResponse['location']).port
@@ -273,11 +271,15 @@ end
 
 # Read all instances
 instances = etcdRead("/v2/keys/services/buildafund-mysql/instances?recursive=true")
+pp instances
 instances.each do |name, data|
+  # Pull out info to connect to leader
   if currentLeader["full"].eql?(name)
     currentLeader["user"] = data["user"]
     currentLeader["password"] = data["password"]
+    puts "DEBUG: Found #{data["user"]} and #{data["password"]}"
   end
+  # Pull out the server ID
   if "#{hostname}:#{port}".eql?(name)
     serverId = data['id']
   end
