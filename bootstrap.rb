@@ -51,6 +51,7 @@ def register (hostname, port, options={})
     :redirLimit => 10,
     :leaderIPAddress => "172.17.42.1",
     :leaderPort => 4001
+    :prevExist => "false"
   }
   # Merge defaults with provided options
   options = defaults.merge(options)
@@ -59,25 +60,18 @@ def register (hostname, port, options={})
 
   http = Net::HTTP.new(options[:leaderIPAddress], options[:leaderPort])
   registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
-  registerRequest.set_form_data('dir' => 'true', 'ttl' => 6000)
+  registerRequest.set_form_data('dir' => 'true', 'ttl' => 6000, 'prevExit' => options[:prevExit])
   registerResponse = http.request(registerRequest);
   case registerResponse
     when Net::HTTPSuccess
       # Process successful response
-      case registerResponse.code
-        when "201"
-          puts "REGISTER: register success"
-        when "403"
-          puts "REGISTER: Already registered. Updating TTL"
-          generateCredentials = false;
-          registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
-          registerRequest.set_form_data('prevExist' => 'true', 'dir' => 'true', 'ttl' => 6000)
-          registerResponse = http.request(registerRequest);
-        when "404"
-          puts "REGISTER: Could not register. Received 404 from etcd"
-        else
-          puts "REGISTER: Could not register. Received unknown code #{registerResponse.code} from etcd"
-      end
+      puts "REGISTER: register success"
+    when "403"
+      puts "REGISTER: Already registered. Updating TTL"
+      generateCredentials = false;
+      register(hostname, port, :prevExist => "true")
+    when "404"
+      puts "REGISTER: Could not register. Received 404 from etcd"
     when Net::HTTPRedirection
       newLeaderIPAddress = URI.parse(registerResponse['location']).host
       newLeaderPort = URI.parse(registerResponse['location']).port
@@ -85,6 +79,7 @@ def register (hostname, port, options={})
       register(hostname, port, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
       puts "REGISTER: Encountered error #{registerResponse.error!}"
+      puts "REGISTER: Could not register. Received unknown code #{registerResponse.code} from etcd"
     end
 end
 
@@ -107,12 +102,7 @@ def etcdWrite (etcdPath, value, comment, options={})
   case writeResponse
     when Net::HTTPSuccess
       # Process successful response
-      case writeResponse.code
-        when "201", "200"
-          puts "WRITE: #{comment} written successfully."
-        else
-          puts "WRITE: Could not write username. Received unknown code #{writeResponse.code} from etcd"
-      end
+      puts "WRITE: #{comment} written successfully."
     when Net::HTTPRedirection
       newLeaderIPAddress = URI.parse(writeResponse['location']).host
       newLeaderPort = URI.parse(writeResponse['location']).port
@@ -120,6 +110,7 @@ def etcdWrite (etcdPath, value, comment, options={})
       etcdWrite(etcdPath, value, comment, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
       puts "WRITE: Encountered error #{writeResponse.error!}"
+      puts "WRITE: Could not write username. Received unknown code #{writeResponse.code} from etcd"
     end
 end
 
@@ -136,39 +127,34 @@ def readLeader (etcdPath, options={})
   raise ArgumentError, 'HTTP redirect too deep' if options[:redirLimit] == 0
 
   http = Net::HTTP.new(options[:leaderIPAddress], options[:leaderPort])
+  http.set_debug_output($stdout)
   leaderRequest = Net::HTTP::Get.new(etcdPath)
   leaderResponse = http.request(leaderRequest)
   leaderValue = nil
-  case leaderResponse
-  when Net::HTTPSuccess
-    # Process successful response
-    case
-      when leaderResponse.code.eql?("404")
-        # this should work. etcd is returning the wrong status code
-      when leaderResponse.body.include?("get leader error: read lock error: Cannot reach servers after 3 time")
-        puts "ELECTION: Encountered 'get leader error'"
-        puts "ELECITON: Leader not found. Attempting Election"
-      when leaderResponse.body.empty?
-        puts "ELECTION: Encountered empty body"
-        puts "ELECTION: Leader not found. Attempting Election"
-      else
-        leaderString = "http://" + leaderResponse.body.to_s
-        parsedLeader = URI.parse(leaderString)
-        puts "ELECTION: Elected leader is #{parsedLeader.to_s}"
-        leaderValue = Hash.new
-        leaderValue['host'] = parsedLeader.host.to_s
-        leaderValue['port'] = parsedLeader.port.to_s
-        leaderValue['full'] = "#{parsedLeader.host}:#{parsedLeader.port}"
-    end
-    return leaderValue
-  when Net::HTTPRedirection
-    newLeaderIPAddress = URI.parse(leaderResponse['location']).host
-    newLeaderPort = URI.parse(leaderResponse['location']).port
-    puts "ELECTION: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
-    readLeader(keyPath, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
-  else
-    puts "ELECTION: Encountered error #{leaderResponse.error!}"
+  case
+    when leaderResponse.code.eql?("404")
+      # this should work. etcd is returning the wrong status code
+    when leaderResponse.body.include?("get leader error: read lock error: Cannot reach servers after 3 time")
+      puts "ELECTION: Encountered 'get leader error'"
+      puts "ELECITON: Leader not found. Attempting Election"
+    when leaderResponse.body.empty?
+      puts "ELECTION: Encountered empty body"
+      puts "ELECTION: Leader not found. Attempting Election"
+    when Net::HTTPRedirection
+      newLeaderIPAddress = URI.parse(leaderResponse['location']).host
+      newLeaderPort = URI.parse(leaderResponse['location']).port
+      puts "ELECTION: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
+      readLeader(keyPath, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
+    else
+      leaderString = "http://" + leaderResponse.body.to_s
+      parsedLeader = URI.parse(leaderString)
+      puts "ELECTION: Elected leader is #{parsedLeader.to_s}"
+      leaderValue = Hash.new
+      leaderValue['host'] = parsedLeader.host.to_s
+      leaderValue['port'] = parsedLeader.port.to_s
+      leaderValue['full'] = "#{parsedLeader.host}:#{parsedLeader.port}"
   end
+  return leaderValue
 end
 
 def becomeLeader(etcdPath, value, options={})
@@ -190,11 +176,8 @@ def becomeLeader(etcdPath, value, options={})
     case electionResponse
       when Net::HTTPSuccess
         # Process successful response
-        case electionResponse.code
-          when "200"
-            puts "ELECTION: Election successful. #{value} is now the master."
-            return true
-        end
+        puts "ELECTION: Election successful. #{value} is now the master."
+        return true
       when Net::HTTPRedirection
         newLeaderIPAddress = URI.parse(electionResponse['location']).host
         newLeaderPort = URI.parse(electionResponse['location']).port
