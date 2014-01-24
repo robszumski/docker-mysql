@@ -34,21 +34,17 @@ parser.parse!
 hostname = parsedHostname.host
 port = parsedHostname.port
 
-# Generate user/pass
 def generateUsername
   username_base = "admin"
   username_random = ('a'..'z').to_a.shuffle[0,8].join
   username = username_base + "_" + username_random
 end
-username = generateUsername
 
 def generatePassword
   password = SecureRandom.hex
   encrypted_password = password; #encrypt this!
 end
-password = generatePassword
 
-# Save to etcd
 def register (hostname, port)
   http = Net::HTTP.new("172.17.42.1", 4001)
   registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
@@ -69,7 +65,6 @@ def register (hostname, port)
       puts "REGISTER: Could not register. Received unknown code #{registerResponse.code} from etcd"
   end
 end
-register(parsedHostname.host, parsedHostname.port)
 
 def etcdWrite (keyPath, value, comment)
   http = Net::HTTP.new("172.17.42.1", 4001)
@@ -84,19 +79,6 @@ def etcdWrite (keyPath, value, comment)
   end
 end
 
-# Generate new creds if needed
-if generateCredentials
-  # Write Username
-  path = "/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/user"
-  etcdWrite(path, username, "Username #{username}")
-  # Write Password
-  path = "/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/password"
-  etcdWrite(path, password, "Password")
-else
-  puts "WRITE: Credentials already exist. Skipping generation."
-end
-
-# Read current master
 def readLeader (etcdPath)
   http = Net::HTTP.new("172.17.42.1", 4001)
   leaderRequest = Net::HTTP::Get.new(etcdPath)
@@ -122,10 +104,7 @@ def readLeader (etcdPath)
   end
   return leaderValue
 end
-path = "/mod/v2/leader/buildafund-mysql"
-currentLeader = readLeader(path)
 
-# Attempt to become master
 def becomeLeader(etcdPath, value)
   http = Net::HTTP.new("172.17.42.1", 4001)
   electionRequest = Net::HTTP::Put.new(etcdPath)
@@ -138,18 +117,6 @@ def becomeLeader(etcdPath, value)
     end
 end
 
-if currentLeader.nil?
-  path = "/mod/v2/leader/buildafund-mysql?ttl=60"
-  isNewLeader = becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
-  if isNewLeader
-    currentLeader = Hash.new()
-    currentLeader["host"] = parsedHostname.host.to_s
-    currentLeader["port"] = parsedHostname.port.to_s
-    currentLeader["full"] = "#{parsedHostname.host}:#{parsedHostname.port}"
-  end
-end
-
-# Read all instances
 def etcdRead(etcdPath)
   http = Net::HTTP.new("172.17.42.1", 4001)
   instancesRequest = Net::HTTP::Get.new(etcdPath)
@@ -171,6 +138,44 @@ def etcdRead(etcdPath)
   end
 end
 
+# Generate a username for this machine
+username = generateUsername
+
+# Generate a password for this machine
+password = generatePassword
+
+# Register this machine in etcd
+register(hostname, port)
+
+# If needed, generate creds and save to registered instance
+if generateCredentials
+  # Write username to registered instance
+  path = "/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/user"
+  etcdWrite(path, username, "Username #{username}")
+  # Write password to registered instance
+  path = "/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/password"
+  etcdWrite(path, password, "Password")
+else
+  puts "WRITE: Credentials already exist. Skipping generation."
+end
+
+# Read the current leader
+path = "/mod/v2/leader/buildafund-mysql"
+currentLeader = readLeader(path)
+
+# If there isn't a leader, attempt to become the leader
+if currentLeader.nil?
+  path = "/mod/v2/leader/buildafund-mysql?ttl=60"
+  isNewLeader = becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
+  if isNewLeader
+    currentLeader = Hash.new()
+    currentLeader["host"] = parsedHostname.host.to_s
+    currentLeader["port"] = parsedHostname.port.to_s
+    currentLeader["full"] = "#{parsedHostname.host}:#{parsedHostname.port}"
+  end
+end
+
+# Read all instances
 instances = etcdRead("/v2/keys/services/buildafund-mysql/instances?recursive=true")
 instances.each do |name, data|
   if currentLeader["full"].eql?(name)
@@ -201,7 +206,7 @@ puts "MYSQL: Granting replication users access"
 `echo "GRANT REPLICATION SLAVE ON *.* TO '#{username}'@'%'; FLUSH PRIVILEGES;" | mysql`
 
 # If slave, configure
-if !"#{hostname}:#{port}".eql?(currentLeader)
+if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Setting master to #{currentLeader["full"]}"
   puts "SLAVE: Setting username to #{currentLeader["user"]}"
   puts "SLAVE: Setting log position to X"
