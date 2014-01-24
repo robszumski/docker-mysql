@@ -202,10 +202,10 @@ puts "MYSQL: Granting replication users access"
 
 # If slave, configure
 if !"#{hostname}:#{port}".eql?(currentLeader)
-  puts "SLAVE: Setting master to #{currentLeaderHost}:#{currentLeaderPort}"
-  puts "SLAVE: Setting username to #{leaderDetails[currentLeader]['user']}"
+  puts "SLAVE: Setting master to #{currentLeader["full"]}"
+  puts "SLAVE: Setting username to #{currentLeader["user"]}"
   puts "SLAVE: Setting log position to X"
-  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeaderHost}', MASTER_PORT= #{currentLeaderPort}, MASTER_USER='#{leaderDetails[currentLeader]['user']}', MASTER_PASSWORD='#{leaderDetails[currentLeader]['password']}', MASTER_LOG_FILE='', MASTER_LOG_POS=4;" | mysql`
+  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='', MASTER_LOG_POS=4;" | mysql`
 else
   puts "MASTER: No configuration was needed."
 end
