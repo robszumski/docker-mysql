@@ -166,6 +166,9 @@ puts "MYSQL: Installing DB"
 installMysql = `mysql_install_db`
 puts "MYSQL: Starting process"
 mysqlPID = spawn("/usr/bin/mysqld_safe & sleep 10")
-puts "MYSQL: Granting replication users access"
 puts mysqlPID
-#grantUser = `echo "GRANT ALL ON *.* TO #{username}@'%' IDENTIFIED BY '#{password}' WITH GRANT OPTION; FLUSH PRIVILEGES" | mysql`
+Process.wait(mysqlPID)
+puts "MYSQL: Granting replication users access"
+`echo "CREATE USER '#{username}'@'%' IDENTIFIED BY '#{password}';" | mysql`
+`echo "CREATE USER '#{username}'@'localhost' IDENTIFIED BY '#{password}';" | mysql`
+`echo "GRANT REPLICATION SLAVE ON *.* TO '#{username}'@'%'; FLUSH PRIVILEGES;" | mysql`
