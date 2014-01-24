@@ -84,7 +84,7 @@ def register (hostname, port, options={})
       puts "REGISTER: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
       register(hostname, port, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
-      puts "REGISTER: Encountered error #{response.error!}"
+      puts "REGISTER: Encountered error #{registerResponse.error!}"
     end
 end
 
@@ -101,7 +101,6 @@ def etcdWrite (etcdPath, value, comment, options={})
   raise ArgumentError, 'HTTP redirect too deep' if options[:redirLimit] == 0
 
   http = Net::HTTP.new(options[:leaderIPAddress], options[:leaderPort])
-  http = Net::HTTP.new("172.17.42.1", 4001)
   writeRequest = Net::HTTP::Put.new(etcdPath)
   writeRequest.set_form_data('value' => value)
   writeResponse = http.request(writeRequest);
@@ -120,7 +119,7 @@ def etcdWrite (etcdPath, value, comment, options={})
       puts "WRITE: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
       etcdWrite(etcdPath, value, comment, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
-      puts "WRITE: Encountered error #{response.error!}"
+      puts "WRITE: Encountered error #{writeResponse.error!}"
     end
 end
 
@@ -168,7 +167,7 @@ def readLeader (etcdPath, options={})
     puts "ELECTION: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
     readLeader(keyPath, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
   else
-    puts "ELECTION: Encountered error #{response.error!}"
+    puts "ELECTION: Encountered error #{leaderResponse.error!}"
   end
 end
 
@@ -202,7 +201,7 @@ def becomeLeader(etcdPath, value, options={})
         puts "ELECTION: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
         becomeLeader(etcdPath, value, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
       else
-        puts "ELECTION: Encountered error #{response.error!}"
+        puts "ELECTION: Encountered error #{electionResponse.error!}"
       end
 end
 
@@ -245,7 +244,7 @@ def etcdRead(etcdPath, options={})
       puts "READ: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
       etcdRead(etcdPath, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
-      puts "READ: Encountered error #{response.error!}"
+      puts "READ: Encountered error #{instancesResponse.error!}"
     end
 end
 
