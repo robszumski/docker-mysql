@@ -198,7 +198,7 @@ puts "MYSQL: Installing DB"
 installMysql = `mysql_install_db`
 puts "MYSQL: Starting process"
 mysqlPID = spawn("/usr/bin/mysqld_safe & sleep 10")
-puts mysqlPID
+puts "MYSQL: PID is #{mysqlPID}"
 Process.wait(mysqlPID)
 puts "MYSQL: Granting replication users access"
 `echo "CREATE USER '#{username}'@'%' IDENTIFIED BY '#{password}';" | mysql`
@@ -210,7 +210,7 @@ if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Setting master to #{currentLeader["full"]}"
   puts "SLAVE: Setting username to #{currentLeader["user"]}"
   puts "SLAVE: Setting log position to X"
-  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='', MASTER_LOG_POS=4;" | mysql`
+  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=4; START SLAVE;" | mysql`
 else
   puts "MASTER: No configuration was needed."
 end
