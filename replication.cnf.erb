@@ -2,6 +2,7 @@
 log-bin = /var/log/mysql/mysql-bin.log
 binlog-do-db=stock
 server-id=<%=serverId%>
+bind-address=0.0.0.0
 
 #master-host=<%=currentLeader["host"]%>
 #master-port=<%=currentLeader["port"]%>
