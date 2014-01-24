@@ -48,7 +48,7 @@ end
 def register (hostname, port)
   http = Net::HTTP.new("172.17.42.1", 4001)
   registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
-  registerRequest.set_form_data('dir' => 'true', 'ttl' => 60)
+  registerRequest.set_form_data('dir' => 'true', 'ttl' => 6000)
   registerResponse = http.request(registerRequest);
   case registerResponse.code
     when "201"
@@ -57,7 +57,7 @@ def register (hostname, port)
       puts "REGISTER: Already registered. Updating TTL"
       generateCredentials = false;
       registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
-      registerRequest.set_form_data('prevExist' => 'true', 'dir' => 'true', 'ttl' => 60)
+      registerRequest.set_form_data('prevExist' => 'true', 'dir' => 'true', 'ttl' => 6000)
       registerResponse = http.request(registerRequest);
     when "404"
       puts "REGISTER: Could not register. Received 404 from etcd"
@@ -165,7 +165,7 @@ currentLeader = readLeader(path)
 
 # If there isn't a leader, attempt to become the leader
 if currentLeader.nil?
-  path = "/mod/v2/leader/buildafund-mysql?ttl=60"
+  path = "/mod/v2/leader/buildafund-mysql?ttl=6000"
   isNewLeader = becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
   if isNewLeader
     currentLeader = Hash.new()
