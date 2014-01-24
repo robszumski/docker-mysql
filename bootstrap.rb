@@ -50,32 +50,36 @@ def register (hostname, port, options={})
   defaults = {
     :redirLimit => 10,
     :leaderIPAddress => "172.17.42.1",
-    :leaderPort => 4001
+    :leaderPort => 4001,
     :prevExist => "false"
   }
   # Merge defaults with provided options
   options = defaults.merge(options)
 
   raise ArgumentError, 'HTTP redirect too deep' if options[:redirLimit] == 0
-
   http = Net::HTTP.new(options[:leaderIPAddress], options[:leaderPort])
   registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
-  registerRequest.set_form_data('dir' => 'true', 'ttl' => 6000, 'prevExit' => options[:prevExit])
+  registerRequest.set_form_data('dir' => 'true', 'ttl' => 6000, 'prevExist' => options[:prevExist])
   registerResponse = http.request(registerRequest);
   case registerResponse
     when Net::HTTPSuccess
       # Process successful response
       puts "REGISTER: register success"
-    when "403"
+    when Net::HTTPPreconditionFailed
       puts "REGISTER: Already registered. Updating TTL"
-      generateCredentials = false;
-      register(hostname, port, :prevExist => "true")
-    when "404"
+      generateCredentials = false
+      options[:prevExist] = true
+      options[:redirLimit] = options[:redirLimit]-1
+      # remerge defaults
+      options = defaults.merge(options)
+      register(hostname, port, options)
+    when registerResponse.code.eql?("404")
       puts "REGISTER: Could not register. Received 404 from etcd"
     when Net::HTTPRedirection
       newLeaderIPAddress = URI.parse(registerResponse['location']).host
       newLeaderPort = URI.parse(registerResponse['location']).port
       puts "REGISTER: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
+      puts "REGISTER: Submitting #{hostname}:#{port}" 
       register(hostname, port, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
       puts "REGISTER: Encountered error #{registerResponse.error!}"
@@ -134,18 +138,13 @@ def readLeader (etcdPath, options={})
   case
     when leaderResponse.code.eql?("404")
       # this should work. etcd is returning the wrong status code
-    when leaderResponse.body.include?("get leader error: read lock error: Cannot reach servers after 3 time")
+    when leaderResponse.body.include?("get leader error: read lock error:")
       puts "ELECTION: Encountered 'get leader error'"
       puts "ELECITON: Leader not found. Attempting Election"
     when leaderResponse.body.empty?
       puts "ELECTION: Encountered empty body"
       puts "ELECTION: Leader not found. Attempting Election"
-    when Net::HTTPRedirection
-      newLeaderIPAddress = URI.parse(leaderResponse['location']).host
-      newLeaderPort = URI.parse(leaderResponse['location']).port
-      puts "ELECTION: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
-      readLeader(keyPath, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
-    else
+    when Net::HTTPSuccess
       leaderString = "http://" + leaderResponse.body.to_s
       parsedLeader = URI.parse(leaderString)
       puts "ELECTION: Elected leader is #{parsedLeader.to_s}"
@@ -153,6 +152,8 @@ def readLeader (etcdPath, options={})
       leaderValue['host'] = parsedLeader.host.to_s
       leaderValue['port'] = parsedLeader.port.to_s
       leaderValue['full'] = "#{parsedLeader.host}:#{parsedLeader.port}"
+    else
+      puts "Election: Encountered error #{registerResponse.error!} when reading leader."
   end
   return leaderValue
 end
@@ -211,8 +212,10 @@ def etcdRead(etcdPath, options={})
       instanceDetails = Hash.new
       instances['node']['nodes'].each do |instance|
         name = instance['key'].split('/')[-1]
-        serverId = Integer(instance['createdIndex'])
         keyData = Hash.new
+        serverId = Integer(instance['createdIndex'])
+        puts "READ: Server ID is #{instance['createdIndex']} for #{name}"
+        keyData['id'] = serverId
         instance['nodes'].each do |keys|
           keyName = keys['key'].split('/')[-1]
           keyValue = keys['value'].chomp('"').reverse.chomp('"').reverse #remove quotes, crazy
@@ -274,6 +277,9 @@ instances.each do |name, data|
   if currentLeader["full"].eql?(name)
     currentLeader["user"] = data["user"]
     currentLeader["password"] = data["password"]
+  end
+  if "#{hostname}:#{port}".eql?(name)
+    serverId = data['id']
   end
 end
 
