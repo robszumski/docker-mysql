@@ -48,11 +48,9 @@ def generatePassword
 end
 generatePassword
 
-# Initialize http
-http = Net::HTTP.new("172.17.42.1", 4001)
-
 # Save to etcd
 def register (hostname, port)
+  http = Net::HTTP.new("172.17.42.1", 4001)
   registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
   registerRequest.set_form_data('dir' => 'true', 'ttl' => 60)
   registerResponse = http.request(registerRequest);
@@ -74,6 +72,7 @@ end
 register(parsedHostname.host, parsedHostname.port)
 
 def etcdWrite (keyPath, value, comment)
+  http = Net::HTTP.new("172.17.42.1", 4001)
   writeRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}/user")
   writeRequest.set_form_data('value' => username)
   writeResponse = http.request(writeRequest);
@@ -99,6 +98,7 @@ end
 
 # Read current master
 def readLeader (etcdPath)
+  http = Net::HTTP.new("172.17.42.1", 4001)
   leaderRequest = Net::HTTP::Get.new(etcdPath)
   leaderResponse = http.request(leaderRequest)
   leaderValue = nil
@@ -127,6 +127,7 @@ currentLeader = readLeader(path)
 
 # Attempt to become master
 def becomeLeader(etcdPath, value)
+  http = Net::HTTP.new("172.17.42.1", 4001)
   electionRequest = Net::HTTP::Put.new(etcdPath)
     electionRequest.set_form_data('name' => value)
     electionResponse = http.request(electionRequest)
@@ -144,6 +145,7 @@ end
 
 # Read all instances
 def etcdRead(etcdPath)
+  http = Net::HTTP.new("172.17.42.1", 4001)
   instancesRequest = Net::HTTP::Get.new(etcdPath)
   instancesResponse = http.request(instancesRequest)
   instances = JSON.parse(instancesResponse.body)
