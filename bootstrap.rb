@@ -19,6 +19,7 @@ hostname = nil
 port = nil
 serverId = nil
 parsedHostname = nil
+logPosition = nil
 #http.set_debug_output($stdout)
 
 # Read command line flags
@@ -266,6 +267,9 @@ if currentLeader.nil?
     currentLeader["host"] = parsedHostname.host.to_s
     currentLeader["port"] = parsedHostname.port.to_s
     currentLeader["full"] = "#{parsedHostname.host}:#{parsedHostname.port}"
+    # Write log position
+    path = "/v2/keys/services/buildafund-mysql/log"
+    etcdWrite(path, 0, "Log position 0")
   end
 end
 
@@ -310,8 +314,10 @@ puts "MYSQL: Granting replication users access"
 if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Setting master to #{currentLeader["full"]}"
   puts "SLAVE: Setting username to #{currentLeader["user"]}"
-  puts "SLAVE: Setting log position to X"
-  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=4; START SLAVE;" | mysql`
+  # Read log position of leader
+  logPosition = etcdRead("/v2/keys/services/buildafund-mysql/log")
+  puts "SLAVE: Setting log position to #{logPosition}"
+  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=#{logPosition}; START SLAVE;" | mysql`
 else
   puts "MASTER: No configuration was needed."
 end
