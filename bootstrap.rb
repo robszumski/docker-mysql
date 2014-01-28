@@ -206,23 +206,8 @@ def etcdRead(etcdPath, options={})
   instancesResponse = http.request(instancesRequest)
   case instancesResponse
     when Net::HTTPSuccess
-      # Process successful response
       instances = JSON.parse(instancesResponse.body)
-      instanceDetails = Hash.new
-      instances['node']['nodes'].each do |instance|
-        name = instance['key'].split('/')[-1]
-        keyData = Hash.new
-        serverId = Integer(instance['createdIndex'])
-        puts "READ: Server ID is #{instance['createdIndex']} for #{name}"
-        keyData['id'] = serverId
-        instance['nodes'].each do |keys|
-          keyName = keys['key'].split('/')[-1]
-          keyValue = keys['value'].chomp('"').reverse.chomp('"').reverse #remove quotes, crazy
-          keyData[keyName] = keyValue
-          instanceDetails[name] = keyData
-        end
-      end
-      return instanceDetails
+      return instances
     when Net::HTTPRedirection
       newLeaderIPAddress = URI.parse(instancesResponse['location']).host
       newLeaderPort = URI.parse(instancesResponse['location']).port
@@ -275,7 +260,21 @@ end
 
 # Read all instances
 instances = etcdRead("/v2/keys/services/buildafund-mysql/instances?recursive=true")
-pp instances
+# Process successful response
+instanceDetails = Hash.new
+instances['node']['nodes'].each do |instance|
+  name = instance['key'].split('/')[-1]
+  keyData = Hash.new
+  serverId = Integer(instance['createdIndex'])
+  puts "READ: Server ID is #{instance['createdIndex']} for #{name}"
+  keyData['id'] = serverId
+  instance['nodes'].each do |keys|
+    keyName = keys['key'].split('/')[-1]
+    keyValue = keys['value'].chomp('"').reverse.chomp('"').reverse #remove quotes, crazy
+    keyData[keyName] = keyValue
+    instanceDetails[name] = keyData
+  end
+end
 instances.each do |name, data|
   # Pull out info to connect to leader
   if currentLeader["full"].eql?(name)
@@ -315,7 +314,9 @@ if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Setting master to #{currentLeader["full"]}"
   puts "SLAVE: Setting username to #{currentLeader["user"]}"
   # Read log position of leader
-  logPosition = etcdRead("/v2/keys/services/buildafund-mysql/log")
+  logResponse = etcdRead("/v2/keys/services/buildafund-mysql/log")
+  logPosition = logResponse['node']['nodes'][0]
+  pp logPosition
   puts "SLAVE: Setting log position to #{logPosition}"
   `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=#{logPosition}; START SLAVE;" | mysql`
 else
