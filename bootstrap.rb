@@ -319,8 +319,7 @@ if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Setting username to #{currentLeader["user"]}"
   # Read log position of leader
   logResponse = etcdRead("/v2/keys/services/buildafund-mysql/log")
-  logPosition = logResponse['node']['nodes'][0]
-  pp logPosition
+  logPosition = logResponse['node']['value']
   puts "SLAVE: Setting log position to #{logPosition}"
   `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=#{logPosition}; START SLAVE;" | mysql`
 else
