@@ -275,7 +275,7 @@ instances['node']['nodes'].each do |instance|
     instanceDetails[name] = keyData
   end
 end
-instances.each do |name, data|
+instanceDetails.each do |name, data|
   # Pull out info to connect to leader
   if currentLeader["full"].eql?(name)
     currentLeader["user"] = data["user"]
