@@ -20,6 +20,7 @@ port = nil
 serverId = nil
 parsedHostname = nil
 logPosition = nil
+globalTTL = 60
 #http.set_debug_output($stdout)
 
 # Read command line flags
@@ -27,7 +28,9 @@ parser = OptionParser.new do|opts|
   opts.banner = "Usage: bootstrap.rb [options]"
   opts.on('-h', '--hostname http://ip-or-hostname', 'Hostname') do |hostname|
     parsedHostname = URI.parse(hostname)
-    puts "COMMAND: Parsed hostname is #{parsedHostname.to_s}"
+    puts "COMMAND: Parsed full hostname is #{parsedHostname.to_s}"
+    puts "COMMAND: Parsed host is #{parsedHostname.host}"
+    puts "COMMAND: Parsed port is #{parsedHostname.port}"
   end
 end
 parser.parse!
@@ -52,7 +55,8 @@ def register (hostname, port, options={})
     :redirLimit => 10,
     :leaderIPAddress => "172.17.42.1",
     :leaderPort => 4001,
-    :prevExist => "false"
+    :prevExist => "false",
+    :ttl => 60
   }
   # Merge defaults with provided options
   options = defaults.merge(options)
@@ -60,14 +64,14 @@ def register (hostname, port, options={})
   raise ArgumentError, 'HTTP redirect too deep' if options[:redirLimit] == 0
   http = Net::HTTP.new(options[:leaderIPAddress], options[:leaderPort])
   registerRequest = Net::HTTP::Put.new("/v2/keys/services/buildafund-mysql/instances/#{hostname}:#{port}")
-  registerRequest.set_form_data('dir' => 'true', 'ttl' => 6000, 'prevExist' => options[:prevExist])
+  registerRequest.set_form_data('dir' => 'true', 'ttl' => options[:ttl], 'prevExist' => options[:prevExist])
   registerResponse = http.request(registerRequest);
   case registerResponse
     when Net::HTTPSuccess
       # Process successful response
-      puts "REGISTER: register success"
+      puts "REGISTER: register success. TTL of #{options[:ttl]}"
     when Net::HTTPPreconditionFailed
-      puts "REGISTER: Already registered. Updating TTL"
+      puts "REGISTER: Already registered. Updating TTL with another #{options[:ttl]}"
       generateCredentials = false
       options[:prevExist] = true
       options[:redirLimit] = options[:redirLimit]-1
@@ -153,7 +157,7 @@ def readLeader (etcdPath, options={})
       leaderValue['port'] = parsedLeader.port.to_s
       leaderValue['full'] = "#{parsedLeader.host}:#{parsedLeader.port}"
     else
-      puts "Election: Encountered error #{registerResponse.error!} when reading leader."
+      puts "ELECTION: Encountered error #{registerResponse.error!} when reading leader."
   end
   return leaderValue
 end
@@ -225,7 +229,7 @@ username = generateUsername
 password = generatePassword
 
 # Register this machine in etcd
-register(hostname, port)
+register(hostname, port, :ttl => globalTTL)
 
 # If needed, generate creds and save to registered instance
 if generateCredentials
@@ -245,7 +249,7 @@ currentLeader = readLeader(path)
 
 # If there isn't a leader, attempt to become the leader
 if currentLeader.nil?
-  path = "/mod/v2/leader/buildafund-mysql?ttl=6000"
+  path = "/mod/v2/leader/buildafund-mysql?ttl=#{globalTTL}"
   isNewLeader = becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
   if isNewLeader
     currentLeader = Hash.new()
