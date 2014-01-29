@@ -317,6 +317,8 @@ puts "MYSQL: Granting replication users access"
 if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Setting master to #{currentLeader["full"]}"
   puts "SLAVE: Setting username to #{currentLeader["user"]}"
+  puts "SLAVE: Slave username is #{username}"
+  puts "SLAVE: Slave password is #{password}"
   # Read log position of leader
   logResponse = etcdRead("/v2/keys/services/buildafund-mysql/log")
   logPosition = logResponse['node']['value']
