@@ -20,7 +20,7 @@ port = nil
 serverId = nil
 parsedHostname = nil
 logPosition = nil
-globalTTL = 6000
+globalTTL = 300
 #http.set_debug_output($stdout)
 
 # Read command line flags
@@ -119,7 +119,7 @@ def etcdWrite (etcdPath, value, comment, options={})
       etcdWrite(etcdPath, value, comment, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
     else
       puts "WRITE: Encountered error #{writeResponse.error!}"
-      puts "WRITE: Could not write username. Received unknown code #{writeResponse.code} from etcd"
+      puts "WRITE: Could not write #{comment}. Received unknown code #{writeResponse.code} from etcd"
     end
 end
 
@@ -301,7 +301,6 @@ File.open('/etc/mysql/conf.d/replication.cnf', 'w') { |file| file.write(cnf.resu
 puts "-------------------------------End Config-----------------------------------"
 
 # Start mysql
-#=begin
 puts "MYSQL: Installing DB"
 installMysql = `mysql_install_db`
 puts "MYSQL: Starting process"
@@ -327,4 +326,86 @@ if !"#{hostname}:#{port}".eql?(currentLeader['full'])
 else
   puts "MASTER: No configuration was needed."
 end
-#=end
+
+# Start heartbeating
+loop do
+  prevLeader = currentLeader
+  # Read the current leader
+  path = "/mod/v2/leader/buildafund-mysql"
+  currentLeader = readLeader(path)
+
+  # If there isn't a leader, attempt to become the leader
+  if currentLeader.nil?
+    path = "/mod/v2/leader/buildafund-mysql?ttl=#{globalTTL}"
+    isNewLeader = becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
+    if isNewLeader
+      currentLeader = Hash.new()
+      currentLeader["host"] = parsedHostname.host.to_s
+      currentLeader["port"] = parsedHostname.port.to_s
+      currentLeader["full"] = "#{parsedHostname.host}:#{parsedHostname.port}"
+      # Write log position
+      path = "/v2/keys/services/buildafund-mysql/log"
+      etcdWrite(path, 0, "Log position 0")
+    end
+  end
+
+  # If the leader has changed, reconfigure. If not, heartbeat
+  if !currentLeader['full'].eql?(prevLeader['full'])
+    puts "LEADER CHANGE: #{prevLeader['full']} is now a slave."
+    if !"#{hostname}:#{port}".eql?(currentLeader['full'])
+      register(hostname, port, :ttl => globalTTL)
+      puts "LEADER CHANGE: #{hostname}:#{port} is now (or still is) a slave."
+    else
+      register(hostname, port, :ttl => globalTTL)
+      puts "LEADER CHANGE: #{hostname}:#{port} is now the leader."
+
+      # Read all instances
+      instances = etcdRead("/v2/keys/services/buildafund-mysql/instances?recursive=true")
+      # Process successful response
+      instanceDetails = Hash.new
+      instances['node']['nodes'].each do |instance|
+        name = instance['key'].split('/')[-1]
+        keyData = Hash.new
+        serverId = Integer(instance['createdIndex'])
+        puts "READ: Server ID is #{instance['createdIndex']} for #{name}"
+        keyData['id'] = serverId
+        instance['nodes'].each do |keys|
+          keyName = keys['key'].split('/')[-1]
+          keyValue = keys['value'].chomp('"').reverse.chomp('"').reverse #remove quotes, crazy
+          keyData[keyName] = keyValue
+          instanceDetails[name] = keyData
+        end
+      end
+      instanceDetails.each do |name, data|
+        # Pull out info to connect to leader
+        if currentLeader["full"].eql?(name)
+          currentLeader["user"] = data["user"]
+          currentLeader["password"] = data["password"]
+          puts "DEBUG: Found #{data["user"]} and #{data["password"]}"
+        end
+        # Pull out the server ID
+        if "#{hostname}:#{port}".eql?(name)
+          serverId = data['id']
+        end
+      end
+
+      # Read log position of the promoted slave
+      logPosition = `echo "SHOW MASTER STATUS;" | mysql --skip-column-names | awk '{print $2}'`
+
+      `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=#{logPosition}; START SLAVE;" | mysql`
+    end
+  else
+    if !"#{hostname}:#{port}".eql?(currentLeader['full'])
+      register(hostname, port, :ttl => globalTTL)
+      puts "HEARTBEAT: Slave instance #{hostname}:#{port}"
+    else
+      register(hostname, port, :ttl => globalTTL)
+      puts "HEARTBEAT: Master instance #{hostname}:#{port}"
+      path = "/mod/v2/leader/buildafund-mysql?ttl=#{globalTTL}"
+      etcdWrite(path, currentLeader['full'], "Leader heartbeat #{currentLeader['full']}")
+    end
+  end
+
+  # Sleep for 3/4 of the heartbeat
+  sleep globalTTL*.75
+end
