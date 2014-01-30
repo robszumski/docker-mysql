@@ -390,7 +390,7 @@ loop do
       end
 
       # Read log position of the promoted slave
-      logPosition = `echo "SHOW MASTER STATUS;" | mysql --skip-column-names | awk '{print $2}'`
+      logPosition = `echo "STOP SLAVE; SHOW MASTER STATUS;" | mysql --skip-column-names | awk '{print $2}'`
 
       `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=#{logPosition}; START SLAVE;" | mysql`
     end
