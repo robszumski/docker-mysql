@@ -20,7 +20,7 @@ port = nil
 serverId = nil
 parsedHostname = nil
 logPosition = nil
-globalTTL = 300
+globalTTL = 30
 #http.set_debug_output($stdout)
 
 # Read command line flags
