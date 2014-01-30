@@ -400,12 +400,13 @@ loop do
       puts "HEARTBEAT: Slave instance #{hostname}:#{port}"
     else
       register(hostname, port, :ttl => globalTTL)
-      puts "HEARTBEAT: Master instance #{hostname}:#{port}"
+      puts "HEARTBEAT: Leader instance #{hostname}:#{port}"
       path = "/mod/v2/leader/buildafund-mysql?ttl=#{globalTTL}"
-      etcdWrite(path, currentLeader['full'], "Leader heartbeat #{currentLeader['full']}")
+      becomeLeader(path, "#{parsedHostname.host}:#{parsedHostname.port}")
+      puts "HEARTBEAT: Leader lock renewed for #{hostname}:#{port}"
     end
   end
 
-  # Sleep for 3/4 of the heartbeat
-  sleep globalTTL*.75
+  # Sleep for half of the heartbeat
+  sleep globalTTL/2
 end
