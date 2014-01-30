@@ -319,10 +319,10 @@ if !"#{hostname}:#{port}".eql?(currentLeader['full'])
   puts "SLAVE: Slave username is #{username}"
   puts "SLAVE: Slave password is #{password}"
   # Read log position of leader
-  logResponse = etcdRead("/v2/keys/services/buildafund-mysql/log")
-  logPosition = logResponse['node']['value']
-  puts "SLAVE: Setting log position to #{logPosition}"
-  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003', MASTER_LOG_POS=#{logPosition}; START SLAVE;" | mysql`
+  #logResponse = etcdRead("/v2/keys/services/buildafund-mysql/log")
+  #logPosition = logResponse['node']['value']
+  puts "SLAVE: Setting log position to 0 because this is a new slave"
+  `echo "CHANGE MASTER TO MASTER_HOST='#{currentLeader["host"]}', MASTER_PORT= #{currentLeader["port"]}, MASTER_USER='#{currentLeader["user"]}', MASTER_PASSWORD='#{currentLeader["password"]}', MASTER_LOG_FILE='mysql-bin.000003'; START SLAVE;" | mysql`
 else
   puts "MASTER: No configuration was needed."
 end
