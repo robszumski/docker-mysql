@@ -85,7 +85,7 @@ def register (hostname, port, options={})
       newLeaderPort = URI.parse(registerResponse['location']).port
       puts "REGISTER: Redirect to #{newLeaderIPAddress}:#{newLeaderPort}"
       puts "REGISTER: Submitting #{hostname}:#{port}" 
-      register(hostname, port, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort)
+      register(hostname, port, :redirLimit => options[:redirLimit]-1, :leaderIPAddress => newLeaderIPAddress, :leaderPort => newLeaderPort, :ttl => options[:ttl])
     else
       puts "REGISTER: Encountered error #{registerResponse.error!}"
       puts "REGISTER: Could not register. Received unknown code #{registerResponse.code} from etcd"
